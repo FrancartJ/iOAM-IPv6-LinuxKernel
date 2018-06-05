@@ -1,0 +1,1506 @@
+Les fichiers binaires clean-4.12/certs/signing_key.x509 et release-4.12/certs/signing_key.x509 sont différents
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/linux/ipv6.h release-4.12/include/linux/ipv6.h
+--- clean-4.12/include/linux/ipv6.h	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/include/linux/ipv6.h	2018-06-01 11:39:48.098989297 +0200
+@@ -72,6 +72,10 @@
+ 	__u32		enhanced_dad;
+ 	__u32		addr_gen_mode;
+ 	__s32		disable_policy;
++#ifdef CONFIG_IPV6_IOAM6
++	unsigned long		ioam6_if_id;
++	int		ioam6_if_decap;
++#endif
+ 
+ 	struct ctl_table_header *sysctl_header;
+ };
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/linux/netdevice.h release-4.12/include/linux/netdevice.h
+--- clean-4.12/include/linux/netdevice.h	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/include/linux/netdevice.h	2018-05-29 17:50:43.547943298 +0200
+@@ -1646,6 +1646,17 @@
+ 	char			name[IFNAMSIZ];
+ 	struct hlist_node	name_hlist;
+ 	char 			*ifalias;
++
++#ifdef CONFIG_IPV6_IOAM6
++	struct ioam6_utils{
++		int mode;
++		unsigned int freq;
++		unsigned int counter;
++		struct ipv6_ioam6_hdr *ioamH;
++		struct ipv6_sr_hdr *srH;
++	}ioam6Ut;
++#endif
++
+ 	/*
+ 	 *	I/O specific fields
+ 	 *	FIXME: Merge these and struct ifmap into one
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/net/ioam6.h release-4.12/include/net/ioam6.h
+--- clean-4.12/include/net/ioam6.h	1970-01-01 01:00:00.000000000 +0100
++++ release-4.12/include/net/ioam6.h	2018-05-29 17:43:11.902572241 +0200
+@@ -0,0 +1,45 @@
++#ifndef _NET_IOAM6_H
++#define _NET_IOAM6_H
++
++#include <linux/netdevice.h>
++#include <uapi/linux/ioam6.h>
++
++struct ioam6_register{
++	int mode;
++	int hop_nb;
++	unsigned int freq;
++	__u8 pot_type;
++	__u8 e2e_type;
++	__u16 ioam6_trace_type;
++	__u32 schemaID;
++	int seg_nb;
++	struct in6_addr *segments;
++	char ifname[IFNAMSIZ];
++};
++
++static long ioam6_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
++static int ioam6_open(struct inode *inode, struct file *file);
++static int ioam6_release(struct inode *inode, struct file *file);
++
++static const struct file_operations ioam6_ops = {
++	.owner 		= THIS_MODULE,
++	.open 		= ioam6_open,
++	.release 	= ioam6_release,
++	.unlocked_ioctl = ioam6_ioctl,
++};
++
++static struct miscdevice ioam6_miscdevice = {
++	.minor = MISC_DYNAMIC_MINOR,
++	.name = "ioam6",
++	.fops = &ioam6_ops,
++};
++
++int ioam6_e2e_size(__u8 type);
++int ioam6_pot_size(__u8 type);
++int ioam6_data_size(__u16 type, __u32 schemaID);
++int ioam6_nb_trace_option(int nbHop, int oamDataSize);
++
++#define ioam6_IOC_MAGIC ('x')
++#define ioam6_IOC_SET_MOD _IOW(ioam6_IOC_MAGIC, 0x01, struct ioam6_register)
++
++#endif
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/net/netns/ipv6.h release-4.12/include/net/netns/ipv6.h
+--- clean-4.12/include/net/netns/ipv6.h	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/include/net/netns/ipv6.h	2018-06-01 11:22:58.351300539 +0200
+@@ -36,6 +36,12 @@
+ 	int idgen_retries;
+ 	int idgen_delay;
+ 	int flowlabel_state_ranges;
++#ifdef CONFIG_IPV6_IOAM6
++	unsigned long ioam6_node_id;
++	unsigned long ioam6_node_id_cond;
++	unsigned long ioam6_app_data;
++	unsigned long ioam6_app_data_cond;
++#endif
+ };
+ 
+ struct netns_ipv6 {
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/uapi/linux/in6.h release-4.12/include/uapi/linux/in6.h
+--- clean-4.12/include/uapi/linux/in6.h	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/include/uapi/linux/in6.h	2017-11-26 10:37:55.101610816 +0100
+@@ -144,6 +144,7 @@
+ #define IPV6_TLV_PADN		1
+ #define IPV6_TLV_ROUTERALERT	5
+ #define IPV6_TLV_CALIPSO	7	/* RFC 5570 */
++#define IPV6_TLV_PREALLOC_IOAM6   33
+ #define IPV6_TLV_JUMBO		194
+ #define IPV6_TLV_HAO		201	/* home address option */
+ 
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/uapi/linux/ioam6.h release-4.12/include/uapi/linux/ioam6.h
+--- clean-4.12/include/uapi/linux/ioam6.h	1970-01-01 01:00:00.000000000 +0100
++++ release-4.12/include/uapi/linux/ioam6.h	2018-05-29 17:48:58.465129263 +0200
+@@ -0,0 +1,44 @@
++#ifndef _UAPI_LINUX_IOAM6_H
++#define _UAPI_LINUX_IOAM6_H
++
++#include <linux/types.h>
++#include <net/seg6.h>
++
++#define IOAM6_TRACE_TYPE_0		1 << 15
++#define IOAM6_TRACE_TYPE_1		1 << 14
++#define IOAM6_TRACE_TYPE_2		1 << 13
++#define IOAM6_TRACE_TYPE_3		1 << 12
++#define IOAM6_TRACE_TYPE_4		1 << 11
++#define IOAM6_TRACE_TYPE_5		1 << 10
++#define IOAM6_TRACE_TYPE_6		1 << 9
++#define IOAM6_TRACE_TYPE_7		1 << 8
++#define IOAM6_TRACE_TYPE_8		1 << 7
++#define IOAM6_TRACE_TYPE_9		1 << 6
++#define IOAM6_TRACE_TYPE_10		1 << 5
++#define IOAM6_TRACE_TYPE_11		1 << 4
++
++#define IPV6_TLV_POT_IOAM6 		35
++#define IPV6_TLV_E2E_IOAM6	    36
++
++#define IOAM6_MAX_TRACE_SIZE	256
++#define IOAM6_OPTION_MAX_SIZE   2048
++
++struct ipv6_ioam6_hdr{
++	__u8	nexthdr;
++	__u8	hdrlen;
++
++	__u8 op[0];
++};
++
++/*struct ipv6_preallocioam{
++    __u16 ioam6_trace_type;
++    __u16 ioam6_info;
++    __u32 nodes_data[0];
++};*/
++
++int ioam6_trace_size(__u16 type, __u32 schemaID);
++int ioam6_type_size(__u16 type, __u32 schemaID);
++bool ioam6_insert(struct sk_buff *skb, struct net_device *orig_dev, const struct ipv6hdr *hdr);
++bool ioam6_remove(struct sk_buff *skb, int ioamOff, int ioamLen, int padlen);
++
++#endif
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/include/uapi/linux/ipv6.h release-4.12/include/uapi/linux/ipv6.h
+--- clean-4.12/include/uapi/linux/ipv6.h	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/include/uapi/linux/ipv6.h	2018-05-17 19:53:31.125355786 +0200
+@@ -184,6 +184,10 @@
+ 	DEVCONF_ENHANCED_DAD,
+ 	DEVCONF_ADDR_GEN_MODE,
+ 	DEVCONF_DISABLE_POLICY,
++#ifdef CONFIG_IPV6_IOAM6
++	DEVCONF_IOAM6_IF_ID,
++	DEVCONF_IOAM6_IF_DECAP,
++#endif
+ 	DEVCONF_ACCEPT_RA_RT_INFO_MIN_PLEN,
+ 	DEVCONF_MAX
+ };
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/core/dev.c release-4.12/net/core/dev.c
+--- clean-4.12/net/core/dev.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/core/dev.c	2018-05-29 17:51:01.331619088 +0200
+@@ -7401,6 +7401,14 @@
+ 	if (ret < 0)
+ 		goto out;
+ 
++#if defined(CONFIG_IPV6_IOAM6)
++	dev->ioam6Ut.mode = 0;
++	dev->ioam6Ut.freq = 0;
++	dev->ioam6Ut.counter = 0;
++	dev->ioam6Ut.ioamH = NULL;
++	dev->ioam6Ut.srH = NULL;
++#endif
++
+ 	/* Init, if this function is available */
+ 	if (dev->netdev_ops->ndo_init) {
+ 		ret = dev->netdev_ops->ndo_init(dev);
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ethernet/eth.c release-4.12/net/ethernet/eth.c
+--- clean-4.12/net/ethernet/eth.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ethernet/eth.c	2018-05-14 15:37:16.963954864 +0200
+@@ -83,7 +83,17 @@
+ 	       unsigned short type,
+ 	       const void *daddr, const void *saddr, unsigned int len)
+ {
+-	struct ethhdr *eth = (struct ethhdr *)skb_push(skb, ETH_HLEN);
++	struct ethhdr *eth;
++	
++	if ((skb->data - ETH_HLEN) < skb->head){
++	    printk("[IOAM] drop packet\n");
++	    return -ETH_HLEN;
++	}
++	
++	eth = (struct ethhdr *)skb_push(skb, ETH_HLEN);
++	
++	if(htons(type) == -10)
++	    printk("[IOAM] -10\n");
+ 
+ 	if (type != ETH_P_802_3 && type != ETH_P_802_2)
+ 		eth->h_proto = htons(type);
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/addrconf.c release-4.12/net/ipv6/addrconf.c
+--- clean-4.12/net/ipv6/addrconf.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/addrconf.c	2018-06-01 11:58:29.949239384 +0200
+@@ -247,6 +247,10 @@
+ 	.enhanced_dad           = 1,
+ 	.addr_gen_mode		= IN6_ADDR_GEN_MODE_EUI64,
+ 	.disable_policy		= 0,
++#ifdef CONFIG_IPV6_IOAM6
++	.ioam6_if_id		= 1,
++	.ioam6_if_decap		= 0,
++#endif
+ };
+ 
+ static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
+@@ -301,6 +305,10 @@
+ 	.enhanced_dad           = 1,
+ 	.addr_gen_mode		= IN6_ADDR_GEN_MODE_EUI64,
+ 	.disable_policy		= 0,
++#ifdef CONFIG_IPV6_IOAM6
++	.ioam6_if_id		= 1,
++	.ioam6_if_decap		= 0,
++#endif
+ };
+ 
+ /* Check if a valid qdisc is available */
+@@ -5062,6 +5070,10 @@
+ 	array[DEVCONF_ENHANCED_DAD] = cnf->enhanced_dad;
+ 	array[DEVCONF_ADDR_GEN_MODE] = cnf->addr_gen_mode;
+ 	array[DEVCONF_DISABLE_POLICY] = cnf->disable_policy;
++#ifdef CONFIG_IPV6_IOAM6
++	array[DEVCONF_IOAM6_IF_ID] = cnf->ioam6_if_id;
++	array[DEVCONF_IOAM6_IF_DECAP] = cnf->ioam6_if_decap;
++#endif
+ }
+ 
+ static inline size_t inet6_ifla6_size(void)
+@@ -5992,6 +6004,8 @@
+ static int minus_one = -1;
+ static const int one = 1;
+ static const int two_five_five = 255;
++static unsigned long zero = 0;
++static unsigned long ioam6_if_id_max = 4294967295;
+ 
+ static const struct ctl_table addrconf_sysctl[] = {
+ 	{
+@@ -6360,6 +6374,24 @@
+ 		.mode           = 0644,
+ 		.proc_handler   = addrconf_sysctl_disable_policy,
+ 	},
++#ifdef CONFIG_IPV6_IOAM6
++	{
++		.procname       = "ioam6_if_id",
++		.data           = &ipv6_devconf.ioam6_if_id,
++		.maxlen         = sizeof(unsigned long),
++		.mode           = 0644,
++		.proc_handler   = proc_doulongvec_minmax,
++		.extra1         = &zero,
++		.extra2         = &ioam6_if_id_max,
++	},
++	{
++		.procname       = "ioam6_if_decap",
++		.data           = &ipv6_devconf.ioam6_if_decap,
++		.maxlen         = sizeof(int),
++		.mode           = 0644,
++		.proc_handler   = proc_dointvec,
++	},
++#endif
+ 	{
+ 		/* sentinel */
+ 	}
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/af_inet6.c release-4.12/net/ipv6/af_inet6.c
+--- clean-4.12/net/ipv6/af_inet6.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/af_inet6.c	2018-06-01 09:49:11.859653946 +0200
+@@ -807,6 +807,12 @@
+ 	net->ipv6.sysctl.idgen_retries = 3;
+ 	net->ipv6.sysctl.idgen_delay = 1 * HZ;
+ 	net->ipv6.sysctl.flowlabel_state_ranges = 0;
++#ifdef CONFIG_IPV6_IOAM6
++	net->ipv6.sysctl.ioam6_node_id = 1;
++	net->ipv6.sysctl.ioam6_node_id_cond = 0;
++	net->ipv6.sysctl.ioam6_app_data = 0;
++	net->ipv6.sysctl.ioam6_app_data_cond = 0;
++#endif
+ 	atomic_set(&net->ipv6.fib6_sernum, 1);
+ 
+ 	err = ipv6_init_mibs(net);
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/exthdrs.c release-4.12/net/ipv6/exthdrs.c
+--- clean-4.12/net/ipv6/exthdrs.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/exthdrs.c	2018-06-01 12:06:07.545960783 +0200
+@@ -52,8 +52,12 @@
+ #ifdef CONFIG_IPV6_SEG6_HMAC
+ #include <net/seg6_hmac.h>
+ #endif
+-
++#ifdef CONFIG_IPV6_IOAM6
++#include <uapi/linux/ioam6.h>
++#endif
+ #include <linux/uaccess.h>
++#include <net/dst_metadata.h>
++#include <linux/ktime.h>
+ 
+ /*
+  *	Parsing tlv encoded headers.
+@@ -107,7 +111,9 @@
+ 	int off = skb_network_header_len(skb);
+ 	int len = (skb_transport_header(skb)[1] + 1) << 3;
+ 	int padlen = 0;
+-
++#ifdef CONFIG_IPV6_IOAM6
++	int ioamOff = 0, ioamLen = 0;
++#endif
+ 	if (skb_transport_offset(skb) + len > skb_headlen(skb))
+ 		goto bad;
+ 
+@@ -144,12 +150,17 @@
+ 					goto bad;
+ 			}
+ 			break;
+-
+ 		default: /* Other TLV code so scan list */
+ 			if (optlen > len)
+ 				goto bad;
+ 			for (curr = procs; curr->type >= 0; curr++) {
+ 				if (curr->type == nh[off]) {
++#ifdef CONFIG_IPV6_IOAM6
++				    if(nh[off] == IPV6_TLV_PREALLOC_IOAM6){
++				        ioamOff = off;
++				        ioamLen = optlen;
++				    }
++#endif
+ 					/* type specific length/alignment
+ 					   checks will be performed in the
+ 					   func(). */
+@@ -169,8 +180,16 @@
+ 		len -= optlen;
+ 	}
+ 
+-	if (len == 0)
++
++	if (len == 0){
++#ifdef CONFIG_IPV6_IOAM6
++        if(__in6_dev_get(skb->dev)->cnf.ioam6_if_decap && ioamLen){
++            if(!ioam6_remove(skb, ioamOff, ioamLen, padlen))
++                goto bad;
++        }
++#endif
+ 		return true;
++    }
+ bad:
+ 	kfree_skb(skb);
+ 	return false;
+@@ -381,7 +400,6 @@
+ 
+ 		return 1;
+ 	}
+-
+ 	if (hdr->segments_left >= (hdr->hdrlen >> 1)) {
+ 		__IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
+ 				IPSTATS_MIB_INHDRERRORS);
+@@ -413,7 +431,6 @@
+ 	ipv6_hdr(skb)->daddr = *addr;
+ 
+ 	skb_dst_drop(skb);
+-
+ 	ip6_route_input(skb);
+ 
+ 	if (skb_dst(skb)->error) {
+@@ -431,7 +448,6 @@
+ 			return -1;
+ 		}
+ 		ipv6_hdr(skb)->hop_limit--;
+-
+ 		skb_pull(skb, sizeof(struct ipv6hdr));
+ 		goto looped_back;
+ 	}
+@@ -785,6 +801,245 @@
+ 	return false;
+ }
+ 
++#ifdef CONFIG_IPV6_IOAM6
++static bool ipv6_hop_ioam6(struct sk_buff *skb, int off)
++{
++    struct net *net = ipv6_skb_net(skb);
++    unsigned char *nh = skb_network_header(skb);
++    __u16 trace_type = (nh[off + 4] << 8) | nh[off + 5];
++    __u32 node_id, node_id_cond, egress_id, ingress_id, app_data, app_data_cond;
++    ktime_t tai = 0, now = 0;
++    int offset = 0, node_size = (nh[off + 6] >> 3) * 4, octets_left = (nh[off + 7] & 0x7F) * 4, i, type = 1 << 16, node_offset = 8 + octets_left - node_size;
++    long int sec = 0, delay = 0;
++    struct net_device *ingress_dev = skb->dev, *egress_dev = NULL;
++    
++    if(octets_left == 0 || (nh[off + 6] & 0x04) != 0)
++        return true;
++            
++    if(octets_left % node_size != 0 || octets_left - node_size < 0)
++    {
++        __IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
++				IPSTATS_MIB_INHDRERRORS);
++        return false;
++    }
++    else{
++        for(i=0; i < 16 && (trace_type & (type - 1)) != 0; ++i){
++            type = type >> 1;
++
++            if(offset > node_size){
++                __IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
++				        IPSTATS_MIB_INHDRERRORS);
++                return false;
++            }
++            if(type & trace_type){
++                switch(type)
++                {
++                    case IOAM6_TRACE_TYPE_0:
++                        node_id = dev_net(skb->dev)->ipv6.sysctl.ioam6_node_id;
++                        nh[off + node_offset + offset] = ipv6_hdr(skb)->hop_limit - 1;
++                        nh[off + node_offset + offset + 1] = (node_id >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (node_id >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = node_id & 0xFF;
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_1:
++                        if(ingress_dev != NULL)
++                        {
++                            ingress_id = __in6_dev_get(ingress_dev)->cnf.ioam6_if_id;
++                            nh[off + node_offset + offset] = (ingress_id >> 8) & 0xFF;
++                            nh[off + node_offset + offset + 1] = ingress_id & 0xFF;
++                            dev_put(ingress_dev);
++                        }
++                        else
++                        {
++                            nh[off + node_offset + offset] = 0xFF;
++                            nh[off + node_offset + offset + 1] =  0xFF;
++                        }
++
++		                if (!skb_valid_dst(skb))
++                            ip6_route_input(skb);
++
++		                egress_dev = skb_dst(skb)->dev;
++		                
++		                if(egress_dev != NULL)
++		                {
++		                    egress_id = __in6_dev_get(egress_dev)->cnf.ioam6_if_id;
++		                    nh[off + node_offset + offset + 2] = (egress_id >> 8) & 0xFF;
++                            nh[off + node_offset + offset + 3] = egress_id & 0xFF;
++		                }
++                        else
++                        {
++                            nh[off + node_offset + offset + 2] = 0xFF;
++                            nh[off + node_offset + offset + 3] =  0xFF;
++                        }   
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_2:
++                        if(tai == 0)
++                             tai = ktime_get_tai_ns();
++
++                        sec = tai / NSEC_PER_SEC;
++                        nh[off + node_offset + offset] = (sec >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 1] = (sec >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (sec >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = sec & 0xFF;
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_3:
++                        if(tai == 0)
++                             tai = ktime_get_tai_ns();
++
++                        nh[off + node_offset + offset] = (tai >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 1] = (tai >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (tai >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = tai & 0xFF;
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_4:
++                        if(skb->tstamp != 0)
++                        {
++                            if(now == 0)
++                                 now = ktime_get_real();
++                            
++                            delay = now - skb->tstamp;
++                            if(delay < ((2 << 31) - 1))
++                            {
++                            nh[off + node_offset + offset] = (delay >> 24) & 0xFF;
++                            nh[off + node_offset + offset + 1] = (delay >> 16) & 0xFF;
++                            nh[off + node_offset + offset + 2] = (delay >> 8) & 0xFF;
++                            nh[off + node_offset + offset + 3] = delay & 0xFF;
++                            }
++                            else
++                            {
++                                nh[off + node_offset + offset] = 0x80;
++                                nh[off + node_offset + offset + 1] = 0;
++                                nh[off + node_offset + offset + 2] = 0;
++                                nh[off + node_offset + offset + 3] = 0;
++                            }
++                        }
++                        else
++                        {
++                            nh[off + node_offset + offset] = 0xFF;
++                            nh[off + node_offset + offset + 1] = 0xFF;
++                            nh[off + node_offset + offset + 2] = 0xFF;
++                            nh[off + node_offset + offset + 3] = 0xFF;
++                        }
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_5:
++                        app_data = dev_net(skb->dev)->ipv6.sysctl.ioam6_app_data;
++                        
++                        nh[off + node_offset + offset] = (app_data >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 1] = (app_data >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (app_data >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = app_data & 0xFF;
++                        
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_6:
++	                    nh[off + node_offset + offset] = 0xFF;
++                        nh[off + node_offset + offset + 1] =  0xFF;
++                        nh[off + node_offset + offset + 2] =  0xFF;
++                        nh[off + node_offset + offset + 3] =  0xFF;
++		                
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_7:
++                        //must change to take into account schemaID
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_8:
++                        node_id = dev_net(skb->dev)->ipv6.sysctl.ioam6_node_id;
++                        node_id_cond = dev_net(skb->dev)->ipv6.sysctl.ioam6_node_id_cond;
++                        nh[off + node_offset + offset] = ipv6_hdr(skb)->hop_limit;
++                        nh[off + node_offset + offset + 1] = (node_id >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (node_id >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = node_id & 0xFF;
++                        nh[off + node_offset + offset + 4] = (node_id_cond >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 5] = (node_id_cond >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 6] = (node_id_cond >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 7] = node_id_cond & 0xFF;
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_9:
++                        if(ingress_dev != NULL)
++                        {
++                            ingress_id = __in6_dev_get(ingress_dev)->cnf.ioam6_if_id;
++                            nh[off + node_offset + offset] = (ingress_id >> 24) & 0xFF;
++                            nh[off + node_offset + offset + 1] = (ingress_id >> 16) & 0xFF;
++                            nh[off + node_offset + offset + 2] = (ingress_id >> 8) & 0xFF;
++                            nh[off + node_offset + offset + 3] = ingress_id & 0xFF;
++                            dev_put(ingress_dev);
++                        }
++                        else
++                        {
++                            nh[off + node_offset + offset] = 0xFF;
++                            nh[off + node_offset + offset + 1] =  0xFF;
++                            nh[off + node_offset + offset + 2] =  0xFF;
++                            nh[off + node_offset + offset + 3] =  0xFF;
++                        }
++
++                        if (!skb_valid_dst(skb))
++                            ip6_route_input(skb);
++
++		                egress_dev = skb_dst(skb)->dev;
++
++		                if(egress_dev != NULL)
++		                {
++		                    egress_id = __in6_dev_get(egress_dev)->cnf.ioam6_if_id;
++		                    nh[off + node_offset + offset + 4] = (egress_id >> 24) & 0xFF;
++		                    nh[off + node_offset + offset + 5] = (egress_id >> 16) & 0xFF;
++		                    nh[off + node_offset + offset + 6] = (egress_id >> 8) & 0xFF;
++                            nh[off + node_offset + offset + 7] = egress_id & 0xFF;
++		                }
++                        else
++                        {
++                            nh[off + node_offset + offset + 4] = 0xFF;
++                            nh[off + node_offset + offset + 5] =  0xFF;
++                            nh[off + node_offset + offset + 6] = 0xFF;
++                            nh[off + node_offset + offset + 7] =  0xFF;
++                        }
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_10:
++                        app_data = dev_net(skb->dev)->ipv6.sysctl.ioam6_app_data;
++                        nh[off + node_offset + offset] = (app_data >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 1] = (app_data >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 2] = (app_data >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 3] = app_data & 0xFF;
++                        
++                        app_data_cond = dev_net(skb->dev)->ipv6.sysctl.ioam6_app_data_cond;
++                        nh[off + node_offset + offset + 4] = (app_data_cond >> 24) & 0xFF;
++                        nh[off + node_offset + offset + 5] = (app_data_cond >> 16) & 0xFF;
++                        nh[off + node_offset + offset + 6] = (app_data_cond >> 8) & 0xFF;
++                        nh[off + node_offset + offset + 7] = app_data_cond & 0xFF;
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    case IOAM6_TRACE_TYPE_11:
++                        offset += ioam6_type_size(type, 0);
++                        break;
++                    default:
++                        break;
++                }
++            }
++        }
++        
++        if(offset != node_size){
++            __IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
++		    		IPSTATS_MIB_INHDRERRORS);
++            return false;
++        }
++
++        if(node_offset - 8 == 0 && (ingress_dev == NULL || !__in6_dev_get(ingress_dev)->cnf.ioam6_if_decap))
++            nh[off + 6] = (nh[off + 6] | 1 << 2);
++        
++        nh[off + 7] = (octets_left - node_size) / 4;
++    }
++
++    return true;
++}
++#endif
++
+ static const struct tlvtype_proc tlvprochopopt_lst[] = {
+ 	{
+ 		.type	= IPV6_TLV_ROUTERALERT,
+@@ -798,6 +1053,12 @@
+ 		.type	= IPV6_TLV_CALIPSO,
+ 		.func	= ipv6_hop_calipso,
+ 	},
++#ifdef CONFIG_IPV6_IOAM6
++	{
++		.type	= IPV6_TLV_PREALLOC_IOAM6,
++		.func	= ipv6_hop_ioam6,
++	},
++#endif
+ 	{ -1, }
+ };
+ 
+@@ -820,9 +1081,13 @@
+ 
+ 	opt->flags |= IP6SKB_HOPBYHOP;
+ 	if (ip6_parse_tlv(tlvprochopopt_lst, skb)) {
++	    if(ipv6_hdr(skb)->nexthdr != NEXTHDR_HOP)
++	        opt->flags = opt->flags & ~IP6SKB_HOPBYHOP;
++	    else{
+ 		skb->transport_header += (skb_transport_header(skb)[1] + 1) << 3;
+ 		opt = IP6CB(skb);
+ 		opt->nhoff = sizeof(struct ipv6hdr);
++		}
+ 		return 1;
+ 	}
+ 	return -1;
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/ioam6.c release-4.12/net/ipv6/ioam6.c
+--- clean-4.12/net/ipv6/ioam6.c	1970-01-01 01:00:00.000000000 +0100
++++ release-4.12/net/ipv6/ioam6.c	2018-05-31 17:28:37.818766956 +0200
+@@ -0,0 +1,710 @@
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/fs.h>
++#include <linux/miscdevice.h>
++#include <linux/kernel.h>
++#include <asm/uaccess.h>
++#include <linux/rtnetlink.h>
++#include <net/ioam6.h>
++#include <linux/in6.h>
++#include <net/addrconf.h>
++#include <uapi/linux/seg6.h>
++#include <uapi/linux/in6.h>
++#include <linux/ktime.h>
++
++//compute the size in octets POT option
++int ioam6_e2e_size(__u8 type){
++	int size = 4;
++
++	switch(type){
++	case (__u8) 0:
++		size += 8;
++		break;
++	case (__u8) 1:
++		size += 8;
++		break;
++	}
++
++	return size;
++}
++
++//compute the size in octets POT option
++int ioam6_pot_size(__u8 type){
++	int size = 4;
++
++	switch(type){
++	case (__u8) 0:
++		size += 16;
++		break;
++	case (__u8) 1:
++		size += 16;
++		break;
++	}
++
++	return size;
++}
++
++int ioam6_schema_size(__u32 schemaID){
++    int size = 0;
++
++	switch(schemaID){
++	case (__u32) 0:
++		size += 4;
++		break;
++	case (__u32) 1:
++		size += 8;
++		break;
++	}
++	
++	return size;
++}
++
++int ioam6_type_size(__u16 type, __u32 schemaID){
++    int size = 0;
++    
++    switch(type){
++        case IOAM6_TRACE_TYPE_0:
++        case IOAM6_TRACE_TYPE_1:
++        case IOAM6_TRACE_TYPE_2:
++        case IOAM6_TRACE_TYPE_3:
++        case IOAM6_TRACE_TYPE_4:
++        case IOAM6_TRACE_TYPE_5:
++        case IOAM6_TRACE_TYPE_6:
++            size = 4;
++            break;
++        case IOAM6_TRACE_TYPE_7:
++            //+4 because of length and schemaID
++            size = 4 + ioam6_schema_size(schemaID);;
++            break;
++        case IOAM6_TRACE_TYPE_8:
++        case IOAM6_TRACE_TYPE_9:
++        case IOAM6_TRACE_TYPE_10:
++            size = 8;
++            break;
++	    case IOAM6_TRACE_TYPE_11:
++            size = 4;
++            break;
++	    default:
++	        break;
++	}
++	
++	return size;
++}
++
++int ioam6_nb_octet_before(__u16 trace_type, __u16 giventType, __u32 schemaID){
++    int nbOctet = 0, i;
++
++    for(i = 0; !(giventType & (1 << i)); ++i){
++        nbOctet += ioam6_type_size((1 << i), schemaID);
++        if(i==15)
++            return -1;
++    }
++    
++    return nbOctet;
++}
++
++//compute the size in octets of option data
++int ioam6_trace_size(__u16 type, __u32 schemaID){
++	int size = 0, i;
++
++    for(i=0; i<16 && (type >> i) != 0; ++i){
++        if(type & (1 << i))
++            size += ioam6_type_size(type & (1 << i), schemaID);
++    }
++    
++	return size;
++}
++
++/*int ioam6_nb_trace_option(int nbHop, int ioamTraceSize){
++	int maxNodeByTrace, ret;
++
++	maxNodeByTrace = (IOAM6_MAX_TRACE_SIZE-6) / ioamTraceSize;
++	ret = nbHop / maxNodeByTrace;
++
++	if(nbHop%maxNodeByTrace)
++		++ret;
++
++	return ret;
++}*/
++
++int free_ioam6h(struct net_device *dev){
++    kfree(dev->ioam6Ut.ioamH);
++	dev->ioam6Ut.ioamH = NULL;
++
++	return 0;
++}
++
++int free_srh(struct net_device *dev){
++    kfree(dev->ioam6Ut.srH);
++    dev->ioam6Ut.srH = NULL;
++
++    return 0;
++}
++
++void display_trace(unsigned char *nh, int off, int len){
++	int i=0, nodeSize = 0, nodeNb = 0;
++
++	printk("[IOAM] TRACE START\n");
++	printk("%2x %2x %2x %2x\n", nh[off + 4], nh[off + 5], nh[off + 6], nh[off + 7]);
++
++    nodeSize = ioam6_trace_size((nh[off + 4] << 8) | nh[off + 5], 0);
++    printk("node size : %d\n", nodeSize);	            
++    len -= 8;
++    i += 8;
++    while(len > 0){
++        if(len%nodeSize == 0)
++            printk("node %d:\n", nodeNb++);
++        printk("%2x %2x %2x %2x\n", nh[off + i], nh[off + i + 1], nh[off + i + 2], nh[off + i + 3]);
++        len -= 4;
++        i += 4;
++    }
++
++	printk("[IOAM] TRACE END\n");
++}
++
++struct ipv6_sr_hdr* construct_srh(struct ioam6_register ioamR){
++    int i;
++    struct ipv6_sr_hdr *srh = NULL;
++
++    srh = kzalloc(sizeof(struct ipv6_sr_hdr) + sizeof(struct in6_addr) * (ioamR.seg_nb + 1), GFP_KERNEL);
++    
++    if(srh == NULL)
++        return NULL;
++    
++    // + 1 because we must add the true destination
++    srh->hdrlen = (ioamR.seg_nb + 1) * 2;
++    srh->type = IPV6_SRCRT_TYPE_4;
++    srh->segments_left = ioamR.seg_nb;
++    srh->first_segment = ioamR.seg_nb;
++    //srh->flags = SR6_FLAG1_OAM;
++
++    for(i = 1; i <= ioamR.seg_nb; ++i)
++        memcpy(srh->segments + i, ioamR.segments +  i - 1, sizeof(struct in6_addr));
++    
++    return srh;
++}
++
++/**
++ * This function return 1 in case of error 0 otherwise
++ * construct the ioam header (also the pading if needed)
++ */
++ //todo check kzalloc return value
++struct ipv6_ioam6_hdr* construct_ioam6h(struct ioam6_register ioamR){
++	int size = 0, ioamTraceSize = 0, nbOption = 0, pad = 0, index=0, opaqueSize = 0;
++	struct ipv6_ioam6_hdr *hdr = NULL;
++
++	if(ioamR.mode & 1) {
++	    if(ioamR.ioam6_trace_type == 0)
++		        return NULL;
++		//compute the length for one node data list
++		ioamTraceSize = ioam6_trace_size(ioamR.ioam6_trace_type, ioamR.schemaID);
++		if(ioamTraceSize & IOAM6_TRACE_TYPE_7)
++		    opaqueSize = ioam6_type_size(IOAM6_TRACE_TYPE_7, ioamR.schemaID);
++		//compute the total size with the "header" of the option
++		size += ioamR.hop_nb * ioamTraceSize + 8;
++		//max of remainlength field
++		if(size - 8 > 512)
++		    return NULL;
++		++nbOption;
++	}
++
++	if(ioamR.mode & 2) {
++		size += ioam6_pot_size(ioamR.pot_type) + 4;
++		++nbOption;
++	}
++
++	if(ioamR.mode & 4){
++		size += ioam6_e2e_size(ioamR.e2e_type) + 4;
++		++nbOption;
++	}
++
++	pad = 8 - (size - 6) % 8;
++	
++	printk("[IOAM] calculated size: %d, pad: %d, nbOption: %d\n", size, pad, nbOption);
++
++	hdr = kzalloc((size + pad + 2) * sizeof(__u8), GFP_KERNEL);
++	
++	if(hdr == NULL)
++	    return NULL;
++	
++	hdr->hdrlen = (size - 6 + pad) / 8;
++
++	hdr->op[index] = IPV6_TLV_PREALLOC_IOAM6;
++	// +6 because of the fields before the node data list
++	hdr->op[index+1] = ioamR.hop_nb * ioamTraceSize + 6;
++	//+4 because after TL, there is 2 reserved bytes
++	hdr->op[index + 4] = ioamR.ioam6_trace_type >> 8;
++    hdr->op[index + 5] = ioamR.ioam6_trace_type & 0xFF;
++    hdr->op[index + 6] = ((ioamTraceSize - opaqueSize)/4) << 3;
++    hdr->op[index + 7] = (ioamTraceSize * ioamR.hop_nb) / 4;
++    //todo change
++	if(ioamR.ioam6_trace_type & IOAM6_TRACE_TYPE_7){
++	    int offset = ioam6_nb_octet_before(ioamR.ioam6_trace_type, IOAM6_TRACE_TYPE_7, ioamR.schemaID), j;
++	    for(j=0; j < ioamR.hop_nb; ++j){
++	        hdr->op[index + 8 + offset + j*ioamTraceSize] = ioam6_schema_size(ioamR.schemaID);
++	        hdr->op[index + 8 + offset + j*ioamTraceSize + 1] = (ioamR.schemaID >> 16) & 0xFF;
++	        hdr->op[index + 8 + offset + j*ioamTraceSize + 2] = (ioamR.schemaID >> 8) & 0xFF;
++	        hdr->op[index + 8 + offset + j*ioamTraceSize + 3] = ioamR.schemaID & 0xFF;
++	    }
++	    
++	}
++	// +6 because of type,len and trace_type, octet_left and flag
++	index += ioamTraceSize * ioamR.hop_nb + 8;
++
++	//POT
++	if(ioamR.mode & 2){
++		hdr->op[index] = IPV6_TLV_POT_IOAM6;
++		hdr->op[index + 1] = ioam6_pot_size(ioamR.pot_type) + 2;
++		hdr->op[index + 4] = ioamR.pot_type;
++		index += ioam6_pot_size(ioamR.pot_type) + 4;
++	}
++	
++	//E2E
++	if(ioamR.mode & 4){
++		hdr->op[index] = IPV6_TLV_E2E_IOAM6;
++		hdr->op[index + 1] = ioam6_e2e_size(ioamR.e2e_type) + 2;
++		hdr->op[index + 4] = ioamR.e2e_type;
++		index += ioam6_e2e_size(ioamR.e2e_type) + 4;
++	}
++	
++	//need pading
++	if(pad != 0){
++	    if(pad == 1)
++	        hdr->op[index] = IPV6_TLV_PAD1;
++	    else{
++	        hdr->op[index] = IPV6_TLV_PADN;
++	        hdr->op[index + 1] = pad - 2;
++	    }
++	}
++
++	return hdr;
++}
++
++bool ioam6_insert(struct sk_buff *skb, struct net_device *orig_dev, const struct ipv6hdr *hdr){
++    u32 pkt_len;
++
++    if(orig_dev->ioam6Ut.mode != 0 && orig_dev->ioam6Ut.ioamH != NULL){
++	    u16 srh_len = 0, ioamh_len = (orig_dev->ioam6Ut.ioamH->hdrlen + 1) << 3;
++	    struct inet6_dev *idev =  __in6_dev_get(skb->dev);
++	    
++	    if( orig_dev->ioam6Ut.srH != NULL)
++	        srh_len = (orig_dev->ioam6Ut.srH->hdrlen + 1) << 3;
++
++	    pkt_len = ntohs(hdr->payload_len);
++	    
++	    orig_dev->ioam6Ut.counter = (orig_dev->ioam6Ut.counter + 1) % orig_dev->ioam6Ut.freq;
++
++        if(srh_len == 0 && hdr->nexthdr != NEXTHDR_HOP && ntohs(hdr->payload_len) + ioamh_len < (1<<16) && !orig_dev->ioam6Ut.counter){
++                
++            if(!skb_cow_head(skb, ioamh_len)){
++                struct ipv6_ioam6_hdr *ioamH;
++                struct ipv6hdr hdrCpy, *ipv6H;
++                __be32 from, to;
++                
++                //get the ipv6 header and pull it from the skb
++                memcpy(&hdrCpy, hdr, sizeof(struct ipv6hdr));
++                skb_pull(skb, sizeof(struct ipv6hdr));
++                
++                //push ioam_header and compute checksum
++                ioamH = (struct ipv6_ioam6_hdr *) skb_push(skb, ioamh_len);
++                skb_reset_transport_header(skb);
++                memcpy(ioamH, orig_dev->ioam6Ut.ioamH, ioamh_len);
++                ioamH->nexthdr = hdrCpy.nexthdr;
++                
++                if (skb->ip_summed == CHECKSUM_COMPLETE)
++                    skb_postpush_rcsum(skb, skb_transport_header(skb), ioamh_len);
++                
++                //push ipv6 header and compute checksum
++                ipv6H = (struct ipv6hdr *) skb_push(skb, sizeof(struct ipv6hdr));
++                skb_reset_network_header(skb);
++                from = ((__be32 *) &hdrCpy)[1];
++                hdrCpy.nexthdr = NEXTHDR_HOP;
++                hdrCpy.payload_len = htons(ioamh_len + (u16)(pkt_len));
++                to = ((__be32 *) &hdrCpy)[1];
++                memcpy(ipv6H, &hdrCpy, sizeof(struct ipv6hdr));
++                //update the checksum because length and next_header have changed
++                if (skb->ip_summed == CHECKSUM_COMPLETE)
++                    update_csum_diff4(skb, from, to);
++            }
++            else
++                orig_dev->ioam6Ut.counter = orig_dev->ioam6Ut.freq - 1;
++        }
++        else if(idev->cnf.seg6_enabled && hdr->nexthdr != NEXTHDR_HOP && hdr->nexthdr != NEXTHDR_ROUTING && hdr->nexthdr == NEXTHDR_ICMP
++                && ((struct icmp6hdr*) skb_transport_header(skb))->icmp6_type == ICMPV6_ECHO_REQUEST
++                && !(hdr->nexthdr == NEXTHDR_DEST && ((struct ipv6_opt_hdr*) skb_transport_header(skb))->nexthdr == NEXTHDR_ROUTING) 
++                && ntohs(hdr->payload_len) + ioamh_len + srh_len < (1<<16) && !orig_dev->ioam6Ut.counter){
++                int nhead = ioamh_len + srh_len + 14;
++
++                if(!skb_cow_head(skb, nhead)){
++                    struct ipv6_ioam6_hdr *ioamH;
++                    struct ipv6_sr_hdr *srH;
++                    struct ipv6hdr hdrCpy, *ipv6H;
++                    __be32 from, to;
++                    
++                    //get the ipv6 header and pull it from the skb
++                    memcpy(&hdrCpy, hdr, sizeof(struct ipv6hdr));
++                    skb_pull(skb, sizeof(struct ipv6hdr));
++                    
++                    //change the ip address
++                    //push sr6 header
++                    srH = (struct ipv6_sr_hdr *) skb_push(skb, srh_len);
++                    skb_reset_transport_header(skb);
++                    memcpy(srH, orig_dev->ioam6Ut.srH, srh_len);
++                    srH->nexthdr = hdrCpy.nexthdr;
++                    srH->segments[0] = hdrCpy.daddr;
++                    
++                    if (skb->ip_summed == CHECKSUM_COMPLETE)
++                        skb_postpush_rcsum(skb, skb_transport_header(skb), srh_len);
++
++                    //push ioam_header and compute checksum
++                    ioamH = (struct ipv6_ioam6_hdr *) skb_push(skb, ioamh_len);
++                    skb_reset_transport_header(skb);
++                    memcpy(ioamH, orig_dev->ioam6Ut.ioamH, ioamh_len);
++                    ioamH->nexthdr = NEXTHDR_ROUTING;
++                    
++                    if (skb->ip_summed == CHECKSUM_COMPLETE)
++                        skb_postpush_rcsum(skb, skb_transport_header(skb), ioamh_len);
++                    
++                    //push ipv6 header and compute checksum
++                    ipv6H = (struct ipv6hdr *) skb_push(skb, sizeof(struct ipv6hdr));
++                    skb_reset_network_header(skb);
++                    from = ((__be32 *) &hdrCpy)[1];
++                    hdrCpy.nexthdr = NEXTHDR_HOP;
++                    hdrCpy.payload_len = htons(ioamh_len + srh_len + (u16)(pkt_len));
++                    hdrCpy.daddr = srH->segments[srH->segments_left];
++                    to = ((__be32 *) &hdrCpy)[1];
++                    memcpy(ipv6H, &hdrCpy, sizeof(struct ipv6hdr));
++                    //update the checksum because length and next_header have changed
++                    if (skb->ip_summed == CHECKSUM_COMPLETE)
++                        update_csum_diff4(skb, from, to);
++
++                    skb_dst_drop(skb);
++                }
++                else
++                    orig_dev->ioam6Ut.counter = orig_dev->ioam6Ut.freq - 1;
++        }
++    }
++    
++    return true;
++}
++
++bool ioam6_remove(struct sk_buff *skb, int ioamOff, int ioamLen, int padlen){
++    struct ipv6hdr *new_ipv6h, ipv6h;
++    __u8 nextHeader = skb_transport_header(skb)[0];
++    unsigned char *new_hbh_h, *hbh_h = skb_transport_header(skb), *nh = skb_network_header(skb);
++    __u16 new_payload_len = 0;
++    int off_newh = 0, new_pad_len = 0, len = (skb_transport_header(skb)[1] + 1) << 3, off = 0;
++    __be32 from, to;
++
++    if (skb_cloned(skb)) {
++        if (pskb_expand_head(skb, 0, 0, GFP_ATOMIC))
++	        return false;
++    }
++    
++    display_trace(nh, ioamOff, ioamLen);
++    
++    memcpy(&ipv6h, ipv6_hdr(skb), sizeof(struct ipv6hdr));
++    
++    if(padlen + ioamLen + 2 == len){
++        skb_pull(skb, sizeof(struct ipv6hdr));
++        
++        if (skb->ip_summed == CHECKSUM_COMPLETE)
++            skb_pull_rcsum(skb, len);
++        else
++            skb_pull(skb, len);
++
++        skb_reset_transport_header(skb);
++        
++        new_payload_len = ntohs(ipv6h.payload_len) - len;
++        new_ipv6h = (struct ipv6hdr *) skb_push(skb, sizeof(struct ipv6hdr));
++        skb_reset_network_header(skb);
++        from = ((__be32 *) &ipv6h)[1];
++        ipv6h.nexthdr = nextHeader;
++        ipv6h.payload_len = htons(new_payload_len);
++        to = ((__be32 *) &ipv6h)[1];
++    }
++    else if( (len - ioamLen) % 8 == 0){
++        new_hbh_h = kzalloc((len - ioamLen) * sizeof(unsigned char), GFP_ATOMIC);
++        
++        if(!new_hbh_h){
++            printk("[IOAM] can do kalloc for new hbh header\n");
++            return true;
++        }
++        
++        skb_pull(skb, sizeof(struct ipv6hdr));
++        
++        if (skb->ip_summed == CHECKSUM_COMPLETE)
++            skb_pull_rcsum(skb, len);
++        else
++            skb_pull(skb, len);
++        
++        memcpy(new_hbh_h, hbh_h, ioamOff);
++        memcpy(new_hbh_h + ioamOff, hbh_h + ioamOff + ioamLen, len - ioamLen - ioamOff);
++
++        hbh_h = (unsigned char *) skb_push(skb, len - ioamLen);
++        skb_reset_transport_header(skb);
++
++        memcpy(hbh_h, new_hbh_h, len - ioamLen);
++        kfree(new_hbh_h);
++        hbh_h[1] = (len - ioamLen - 8) >> 3;
++
++        if (skb->ip_summed == CHECKSUM_COMPLETE)
++            skb_postpush_rcsum(skb, skb_transport_header(skb), len);
++        
++        new_payload_len = ntohs(ipv6h.payload_len) - ioamLen;
++        new_ipv6h = (struct ipv6hdr *) skb_push(skb, sizeof(struct ipv6hdr));
++        skb_reset_network_header(skb);
++        from = ((__be32 *) &ipv6h)[1];
++        ipv6h.payload_len = htons(new_payload_len);
++        to = ((__be32 *) &ipv6h)[1];
++    }
++    else{
++        new_pad_len = (len - ioamLen) % 8;
++        if(new_pad_len != 0)
++            new_pad_len = 8 - new_pad_len;
++        new_hbh_h = kzalloc((len - ioamLen - padlen + new_pad_len) * sizeof(unsigned char), GFP_ATOMIC);
++        
++        if(!new_hbh_h){
++            printk("[IOAM] can do kalloc for new hbh header\n");
++            return true;
++        }
++
++        skb_pull(skb, sizeof(struct ipv6hdr));
++        off = sizeof(struct ipv6hdr);
++        memcpy(new_hbh_h, nh + off, 2);
++        off += 2;
++
++        while (off < len) {
++            switch(nh[off]){
++                case IPV6_TLV_PAD1:
++                    off += 1;
++                    break;
++                case IPV6_TLV_PADN:
++                    off += nh[off + 1] + 2;
++                    break;
++                case IPV6_TLV_PREALLOC_IOAM6:
++                    off += nh[off + 1] + 2;
++                    break;
++                default:
++                    memcpy(new_hbh_h + off_newh, nh + off, nh[off + 1] + 2);
++                    off_newh += nh[off + 1] + 2; 
++                    break;
++            }
++        }
++        
++        if(new_pad_len == 1)
++            new_hbh_h[off_newh] = IPV6_TLV_PAD1;
++        else{
++            new_hbh_h[off_newh] = IPV6_TLV_PADN;
++            new_hbh_h[off_newh + 1] = padlen - 2;
++        }
++        
++        if (skb->ip_summed == CHECKSUM_COMPLETE)
++            skb_pull_rcsum(skb, len);
++        else
++            skb_pull(skb, len);
++        
++        hbh_h = (unsigned char *) skb_push(skb, len - ioamLen);
++        skb_reset_transport_header(skb);
++
++        memcpy(hbh_h, new_hbh_h, len - ioamLen);
++        kfree(new_hbh_h);
++        hbh_h[1] = (len - ioamLen - padlen + new_pad_len - 8) >> 3;
++
++        if (skb->ip_summed == CHECKSUM_COMPLETE)
++            skb_postpush_rcsum(skb, skb_transport_header(skb), len);
++        
++        new_payload_len = ntohs(ipv6h.payload_len) - ioamLen - padlen + new_pad_len;
++        
++        new_ipv6h = (struct ipv6hdr *) skb_push(skb, sizeof(struct ipv6hdr));
++        skb_reset_network_header(skb);
++        from = ((__be32 *) &ipv6h)[1];
++        ipv6h.payload_len = htons(new_payload_len);
++        to = ((__be32 *) &ipv6h)[1];
++    }
++
++    memcpy(new_ipv6h, &ipv6h, sizeof(struct ipv6hdr));
++    //update the checksum because length and next_header have changed
++    if (skb->ip_summed == CHECKSUM_COMPLETE)
++        update_csum_diff4(skb, from, to);
++
++    return true;
++}
++
++//todo test value if mode !=0, nbhop and option must be !=0 also length of addresses
++static long ioam6_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	int ret, i;
++	struct ioam6_register buffer;
++	struct net_device *dev;
++	struct ioam6_register __user *argp = (struct ioam6_register __user *) arg;
++	struct ipv6_ioam6_hdr *ioamh = NULL;
++    struct ipv6_sr_hdr *srh = NULL;
++
++	if(copy_from_user(&buffer, argp, sizeof(struct ioam6_register)) ||
++		copy_from_user(buffer.ifname, argp->ifname, IFNAMSIZ))
++	{
++		printk("[IOAM] Error : copy_from_user failed\n");
++		return 1;
++	}
++
++	if(buffer.seg_nb > 127)
++	{
++		printk("[IOAM] Error : too many addresses\n");
++	    return 1;
++    }
++	if(buffer.seg_nb > 0 && buffer.mode != 0)
++	{
++	    if(buffer.segments == NULL)
++	    {
++	        printk("[IOAM] Error : seg NULL but seg_nb != 0\n");
++			return 1;
++	    }
++		buffer.segments = kmalloc(sizeof(struct in6_addr) * buffer.seg_nb, GFP_KERNEL);
++
++		if (buffer.segments == NULL)
++		{
++			printk("[IOAM] Error : kmalloc failed\n");
++			return 1;
++		}
++        
++        for(i = 0; i < buffer.seg_nb; ++i)
++        {
++		    if(copy_from_user(buffer.segments + i, argp->segments + i, sizeof(struct in6_addr)) <0)
++		    {
++		        ret = 1;
++			    printk("[IOAM] Error : copy_from_user addresses failed\n");
++			    goto free;
++		    }
++		}
++	}
++	
++	if(buffer.ifname == NULL)
++	{
++	    ret = 1;
++		printk("[IOAM] Error : need an interface name\n");
++		goto free;
++	}
++
++	dev = dev_get_by_name(current->nsproxy->net_ns, buffer.ifname);
++
++	if(dev == NULL)
++	{
++	    ret = 1;
++		printk("[IOAM] Error : %s is not an interface name\n",buffer.ifname);
++		goto free;
++	}
++
++	if(buffer.mode < 0 || buffer.mode > 7)
++	{
++		ret =2;
++		printk("[IOAM] Error : The mode must be between 0 and 7\n");
++		goto out;
++	}
++	
++	if(buffer.mode != 0 && buffer.hop_nb == 0)
++	{
++	    ret =2;
++	    printk("[IOAM] Error : mode !=0 so need an hop nb\n");
++	    goto out;
++	}
++
++	ret = 0;
++
++	//change the value for hBH and sR
++	if(buffer.mode == 0)
++	{
++		if(dev->ioam6Ut.srH != NULL)
++			free_srh(dev);
++		if(dev->ioam6Ut.ioamH != NULL)
++			free_ioam6h(dev);
++	}
++	else
++	{
++	    ioamh = construct_ioam6h(buffer);
++	    
++		if(ioamh == NULL){
++		    ret = 3;
++		    printk("[IOAM] error: failed to create ioamh\n");
++			goto out;
++		}
++		
++		if(buffer.seg_nb > 0)
++		{
++		    srh = construct_srh(buffer);
++		    
++			if(srh == NULL)
++			{
++			    ret = 3;
++			    kfree(ioamh);
++			    printk("[IOAM] error: failed to create srh\n");
++			    goto out;
++			}
++		}
++
++		if(dev->ioam6Ut.ioamH != NULL)
++		    free_ioam6h(dev);
++
++		if(dev->ioam6Ut.srH != NULL)
++		    free_srh(dev);
++
++		dev->ioam6Ut.ioamH = ioamh;
++
++	    if(srh != NULL)
++	        dev->ioam6Ut.srH = srh;
++	}
++	//only now because if error before, we must reput old mode
++    dev->ioam6Ut.mode = buffer.mode;
++    dev->ioam6Ut.freq = buffer.freq;
++    dev->ioam6Ut.counter = 0;
++
++out:
++	dev_put(dev);
++free:
++    if(buffer.seg_nb > 0 && buffer.mode != 0)
++		kfree(buffer.segments);
++	return ret;
++
++}
++
++static int ioam6_open(struct inode *inode, struct file *file)
++{
++
++	if(file == NULL || inode == NULL)
++		return -EINVAL;
++
++	file->f_op = &ioam6_ops;
++
++	return 0;
++}
++
++static int ioam6_release(struct inode *inode, struct file *file)
++{
++	return 0;
++}
++
++static int __init ioam6_init(void)
++{
++	int ret;
++
++	ret = misc_register(&ioam6_miscdevice);
++
++	if(ret < 0)
++		printk(KERN_ERR "Unable to register ioam6 misc device.\n");
++
++	return ret;
++}
++
++//free
++static void __exit ioam6_exit(void)
++{
++	misc_deregister(&ioam6_miscdevice);
++}
++
++module_init(ioam6_init);
++module_exit(ioam6_exit);
++
++MODULE_AUTHOR("Jonathan Francart");
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("IOAM6 driver");
++MODULE_SUPPORTED_DEVICE("IOAM6");
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/ip6_input.c release-4.12/net/ipv6/ip6_input.c
+--- clean-4.12/net/ipv6/ip6_input.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/ip6_input.c	2018-05-31 17:44:05.751810202 +0200
+@@ -29,7 +29,7 @@
+ #include <linux/icmpv6.h>
+ #include <linux/mroute6.h>
+ #include <linux/slab.h>
+-
++#include <uapi/linux/icmpv6.h>
+ #include <linux/netfilter.h>
+ #include <linux/netfilter_ipv6.h>
+ 
+@@ -46,6 +46,10 @@
+ #include <net/xfrm.h>
+ #include <net/inet_ecn.h>
+ #include <net/dst_metadata.h>
++#ifdef CONFIG_IPV6_IOAM6
++#include <uapi/linux/ioam6.h>
++#endif
++#include <linux/ktime.h>
+ 
+ int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
+ {
+@@ -173,6 +177,11 @@
+ 	if (ipv6_addr_is_multicast(&hdr->saddr))
+ 		goto err;
+ 
++#ifdef CONFIG_IPV6_IOAM6
++    ioam6_insert(skb, orig_dev, hdr);
++    hdr = ipv6_hdr(skb);
++#endif
++
+ 	skb->transport_header = skb->network_header + sizeof(*hdr);
+ 	IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
+ 
+@@ -204,7 +213,6 @@
+ 
+ 	/* Must drop socket now because of tproxy. */
+ 	skb_orphan(skb);
+-
+ 	return NF_HOOK(NFPROTO_IPV6, NF_INET_PRE_ROUTING,
+ 		       net, NULL, skb, dev, NULL,
+ 		       ip6_rcv_finish);
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/Kconfig release-4.12/net/ipv6/Kconfig
+--- clean-4.12/net/ipv6/Kconfig	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/Kconfig	2017-11-26 10:12:59.773254153 +0100
+@@ -339,4 +339,10 @@
+ 
+ 	  If unsure, say N.
+ 
++config IPV6_IOAM6
++    bool "IPv6: in-situ OAM"
++    depends on IPV6
++    ---help---
++      Enable IOAM6
++
+ endif # IPV6
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/Makefile release-4.12/net/ipv6/Makefile
+--- clean-4.12/net/ipv6/Makefile	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/Makefile	2017-11-26 09:47:56.191597287 +0100
+@@ -25,6 +25,7 @@
+ ipv6-$(CONFIG_NETLABEL) += calipso.o
+ ipv6-$(CONFIG_IPV6_SEG6_LWTUNNEL) += seg6_iptunnel.o
+ ipv6-$(CONFIG_IPV6_SEG6_HMAC) += seg6_hmac.o
++ipv6-$(CONFIG_IPV6_IOAM6) += ioam6.o
+ 
+ ipv6-objs += $(ipv6-y)
+ 
+diff -x .gitignore -x .project -x .mailmap -x x509.genkey -x signing_key.pem -burN clean-4.12/net/ipv6/sysctl_net_ipv6.c release-4.12/net/ipv6/sysctl_net_ipv6.c
+--- clean-4.12/net/ipv6/sysctl_net_ipv6.c	2017-07-03 01:07:02.000000000 +0200
++++ release-4.12/net/ipv6/sysctl_net_ipv6.c	2018-06-01 11:16:40.167784074 +0200
+@@ -22,6 +22,7 @@
+ static int one = 1;
+ static int auto_flowlabels_min;
+ static int auto_flowlabels_max = IP6_AUTO_FLOW_LABEL_MAX;
++static unsigned long ioam6_node_id_max = 16777215;
+ 
+ 
+ static struct ctl_table ipv6_table_template[] = {
+@@ -90,6 +91,37 @@
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec
+ 	},
++#ifdef CONFIG_IPV6_IOAM6
++	{
++		.procname	= "ioam6_node_id",
++		.data		= &init_net.ipv6.sysctl.ioam6_node_id,
++		.maxlen		= sizeof(unsigned long),
++		.mode		= 0644,
++		.proc_handler	= proc_doulongvec_minmax,
++		.extra2     = &ioam6_node_id_max,
++	},
++	{
++		.procname	= "ioam6_node_id_cond",
++		.data		= &init_net.ipv6.sysctl.ioam6_node_id_cond,
++		.maxlen		= sizeof(unsigned long),
++		.mode		= 0644,
++		.proc_handler	= proc_doulongvec_minmax,
++	},
++	{
++		.procname	= "ioam6_app_data",
++		.data		= &init_net.ipv6.sysctl.ioam6_app_data,
++		.maxlen		= sizeof(unsigned long),
++		.mode		= 0644,
++		.proc_handler	= proc_doulongvec_minmax,
++	},
++	{
++		.procname	= "ioam6_app_data_cond",
++		.data		= &init_net.ipv6.sysctl.ioam6_app_data_cond,
++		.maxlen		= sizeof(unsigned long),
++		.mode		= 0644,
++		.proc_handler	= proc_doulongvec_minmax,
++	},
++#endif
+ 	{ }
+ };
+ 
+@@ -149,6 +181,12 @@
+ 	ipv6_table[6].data = &net->ipv6.sysctl.idgen_delay;
+ 	ipv6_table[7].data = &net->ipv6.sysctl.flowlabel_state_ranges;
+ 	ipv6_table[8].data = &net->ipv6.sysctl.ip_nonlocal_bind;
++#ifdef CONFIG_IPV6_IOAM6
++	ipv6_table[9].data = &net->ipv6.sysctl.ioam6_node_id;
++	ipv6_table[10].data = &net->ipv6.sysctl.ioam6_node_id_cond;
++	ipv6_table[11].data = &net->ipv6.sysctl.ioam6_app_data;
++	ipv6_table[12].data = &net->ipv6.sysctl.ioam6_app_data_cond;
++#endif
+ 
+ 	ipv6_route_table = ipv6_route_sysctl_init(net);
+ 	if (!ipv6_route_table)
