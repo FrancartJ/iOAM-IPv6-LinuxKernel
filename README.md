@@ -87,3 +87,44 @@ sudo sysctl -w net.ipv6.ioam6_node_id_cond=V
 ```
 sudo sysctl -w net.ipv6.app_data_cond=V
 ``` 
+# Example
+Topology used:
+
+![Topology](./Topology-linux.png?raw=true "Topology")
+
+On the r1, the following commands were used to collect the hop limit and the interface identifier for 3 hops and to set the value of the node, the ingress and the egress interface identifier.
+```
+./test -m 1 -f 1 -h 3 -o 49152 -i ens3
+sudo sysctl -w net.ipv6.ioam6_node_id=2
+sudo sysctl -w net.ipv6.conf.ens3.ioam6_if_id=2
+sudo sysctl -w net.ipv6.conf.ens4.ioam6_if_id=3
+```
+The following ones on r2 to set the value of the node, the ingress and the egress interface identifier.
+```
+sudo sysctl -w net.ipv6.ioam6_node_id=3
+sudo sysctl -w net.ipv6.conf.ens3.ioam6_if_id=4
+sudo sysctl -w net.ipv6.conf.ens4.ioam6_if_id=5
+```
+The following ones on r3 to set the value of the node, the ingress and the egress interface identifier. And also to make the interface ens3 extracting the iOAM trace.
+```
+sudo sysctl -w net.ipv6.ioam6_node_id=4
+sudo sysctl -w net.ipv6.conf.ens3.ioam6_if_id=6
+sudo sysctl -w net.ipv6.conf.ens4.ioam6_if_id=7
+```
+Then a ping was send from the pc1 to the pc2. The following result can be seen on r3.
+```
+root@r3:~$ tail -f /var/log/syslog
+Jun 20 21:54:41 r3 kernel: [  229.533517] [IOAM] TRACE START
+Jun 20 21:54:41 r3 kernel: [  229.533538] c0  0  10  0
+Jun 20 21:54:41 r3 kernel: [  229.533548] node size : 8
+Jun 20 21:54:41 r3 kernel: [  229.533558] node 0:
+Jun 20 21:54:41 r3 kernel: [  229.533567] 3d  0  0  4
+Jun 20 21:54:41 r3 kernel: [  229.533577]  0  6  0  7
+Jun 20 21:54:41 r3 kernel: [  229.533587] node 1:
+Jun 20 21:54:41 r3 kernel: [  229.533596] 3e  0  0  3
+Jun 20 21:54:41 r3 kernel: [  229.533606]  0  4  0  5
+Jun 20 21:54:41 r3 kernel: [  229.533616] node 2:
+Jun 20 21:54:41 r3 kernel: [  229.533625] 3f  0  0  2
+Jun 20 21:54:41 r3 kernel: [  229.533635]  0  2  0  3
+Jun 20 21:54:41 r3 kernel: [  229.533645] [IOAM] TRACE END
+```
