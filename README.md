@@ -50,23 +50,23 @@ There are differents information which can be collected by the iOAM trace [https
 - application data in normal an wide format.
 
 Some of them can be changed by a application or by the system administrator. Below there is a list of command which can be used to change those values.
-- To change the node identifier one can use the following command where V is the value wanted. If this value is greater than 2^(14)-1, the change will not be applied.
+- To change the node identifier one can use the following command where V is the desired value. If this value is greater than 2^(14)-1, the change will not be applied.
 ```
 sudo sysctl -w net.ipv6.ioam6_node_id=V
 ``` 
-- To change the interface identifier, one can use the following command where V is the value wanted and ifname the name of the interface.
+- To change the interface identifier, one can use the following command where V is the desired value and ifname the name of the interface.
 ```
 sudo sysctl -w net.ipv6.conf.ifname.ioam6_if_id=V
 ``` 
-- To change the application data value, one can use the following command where V is the value wanted.
+- To change the application data value, one can use the following command where V is the desired value.
 ```
 sudo sysctl -w net.ipv6.app_data=V
 ``` 
-- To change the second part of node identifier (contd) in its wide format, one can use the following command where V is the value wanted.
+- To change the second part of node identifier (contd) in its wide format, one can use the following command where V is the desired value.
 ```
 sudo sysctl -w net.ipv6.ioam6_node_id_cond=V
 ``` 
-- To change the second part of application data value (contd) in its wide format, one can use the following command where V is the value wanted.
+- To change the second part of application data value (contd) in its wide format, one can use the following command where V is the desired value.
 ```
 sudo sysctl -w net.ipv6.app_data_cond=V
 ``` 
