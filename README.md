@@ -6,11 +6,28 @@ The file ioam.patch is the patch which must be applied on the Linux kernel.
 The file test.c is a simple c program using the ioctl to create the Hop-By-Hop options header containing the iOAM pre-allocated trace which will be inserted in the packet.
 
 # Using the patch:
-To use the patch, one must download the version 4.12 of the linux kernel. Then apply the patch and build the kernel. To build it, one just need to use the following command. The -j5 is to speed up the process, the number must be equal to the number of cpu core + 1 so in this case there are 4 cpu cores.
+To use the patch, download the version 4.12 of the linux kernel. 
+```
+wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.12.tar.xz
+tar -Jxvf linux-4.12.tar.xz
+``` 
+Then get the patch and apply it
+```
+git clone https://github.com/FrancartJ/iOAM-IPv6-LinuxKernel
+cd linux-4.12/
+patch -p1 < ../iOAM-IPv6-LinuxKernel/ioam.patch
+``` 
+Now enable the new iOAM module.
+```
+make ARCH=x86 menuconfig
+``` 
+In the menu go to Networking support then to Networking option then in The IPv6 protocol. Go all the way down, there will be IPv6: in-situ OAM. Type on the keyboard key y. Then save and exit. Now build the kernel thanks to the two following command where the number atfer j is the number of cpu core + 1.
 ```
 make ARCH=x86 bzImage -j5
 make ARCH=x86 modules -j5
 ``` 
+
+Then you can install it on your host machine or make the step to be able to install it on a VM.
 
 # Using the implementation:
 
