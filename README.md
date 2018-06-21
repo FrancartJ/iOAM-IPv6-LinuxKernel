@@ -27,7 +27,7 @@ make ARCH=x86 bzImage -j5
 make ARCH=x86 modules -j5
 ``` 
 
-Then you can install it on your host machine or make the step to be able to install it on a VM.
+Then you can install it on your host machine or make the step to be able to install it on a VM. There is a easy way to test the implementation [https://github.com/CiscoDevNet/iOAM/tree/master/scripts/vpp_sandbox/example/linux].
 
 # Using the implementation:
 
